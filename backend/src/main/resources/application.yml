@@ -31,5 +31,7 @@ hive:
     agent: ${OPENCODE_AGENT:build}
     reconcile-delay-ms: 5000
 logging:
+  file:
+    name: logs/hive-delivery.log
   level:
     com.hive.delivery: INFO

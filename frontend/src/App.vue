@@ -2,6 +2,7 @@
 import {computed,onMounted,onBeforeUnmount,ref} from 'vue'; import axios from 'axios'; import {VueFlow,MarkerType} from '@vue-flow/core'; import {Background} from '@vue-flow/background'; import {Controls} from '@vue-flow/controls';
 type Project={id:string,name:string,status:string,revision:number,workspacePath:string}; type Snapshot={project:Project,nodes:any[],edges:any[],runs:any[],events:any[]};
 const projects=ref<Project[]>([]), selected=ref(''), snap=ref<Snapshot|null>(null), selectedNode=ref<any>(null), es=ref<EventSource|null>(null);
+const consoleLogs=ref<string[]>([]), showConsole=ref(false), consoleEs=ref<EventSource|null>(null);
 const colors:any={PENDING:'#64748b',READY:'#2563eb',DISPATCHING:'#7c3aed',RUNNING:'#f59e0b',WAITING_EXTERNAL:'#d97706',WAITING_HUMAN:'#9333ea',COMPLETED:'#16a34a',FAILED:'#dc2626',BLOCKED:'#475569',SUPERSEDED:'#94a3b8'};
 const flowNodes=computed(()=>{if(!snap.value)return[];const stages=snap.value.nodes.filter(n=>n.type==='STAGE');const stageIndex=new Map(stages.map((s:any,i:number)=>[s.stageCode,i]));return snap.value.nodes.map((n:any)=>{const si=stageIndex.get(n.stageCode)??0;const children=snap.value!.nodes.filter(x=>x.parentNodeId===n.parentNodeId&&x.type!=='STAGE').sort((a,b)=>a.sortOrder-b.sortOrder);const ci=Math.max(0,children.findIndex(x=>x.id===n.id));return{id:n.id,position:n.type==='STAGE'?{x:si*310,y:20}:{x:si*310,y:150+ci*125},data:{label:n.title,status:n.status,type:n.type},style:{background:colors[n.status]||'#334155',color:'white',border:n.type==='GATE'?'3px solid #eab308':'1px solid #94a3b8',borderRadius:n.type==='STAGE'?'20px':'10px',width:'240px',padding:'12px'}}})});
 const flowEdges=computed(()=>snap.value?.edges.map((e:any)=>({id:e.id,source:e.source,target:e.target,markerEnd:MarkerType.ArrowClosed,animated:true}))||[]);
@@ -11,12 +12,15 @@ async function select(id:string){selected.value=id;await refresh();es.value?.clo
 async function refresh(){if(selected.value)snap.value=(await axios.get(`/api/projects/${selected.value}/graph`)).data}
 async function start(){await axios.post(`/api/projects/${selected.value}/start`);setTimeout(refresh,300)}
 async function approve(){if(selectedNode.value){await axios.post(`/api/projects/${selected.value}/nodes/${selectedNode.value.id}/approve`);selectedNode.value=null;refresh()}}
-onMounted(loadProjects);onBeforeUnmount(()=>es.value?.close());
+function connectLogStream(){consoleEs.value?.close();consoleEs.value=new EventSource('/api/logs/stream');consoleEs.value.addEventListener('log',(e:any)=>{consoleLogs.value.push(e.data);if(consoleLogs.value.length>500)consoleLogs.value.splice(0,consoleLogs.value.length-500);});}
+function toggleConsole(){showConsole.value=!showConsole.value;if(showConsole.value&&!consoleEs.value)connectLogStream();else if(!showConsole.value){consoleEs.value?.close();consoleEs.value=null;}}
+onMounted(loadProjects);onBeforeUnmount(()=>{es.value?.close();consoleEs.value?.close();});
 </script>
 <template>
 <div class="shell"><header><div><h1>Hive Delivery Graph</h1><p>Java 21 · LangGraph4j · OpenCode</p></div><div class="actions"><select v-model="selected" @change="select(selected)"><option v-for="p in projects" :value="p.id">{{p.name}} · {{p.status}}</option></select><button @click="create">创建演示项目</button><button class="primary" :disabled="!selected" @click="start">运行 / 继续</button><a href="http://localhost:8080/?instance=delivery-control" target="_blank">Control Studio</a></div></header>
 <div v-if="snap" class="meta"><b>{{snap.project.name}}</b><span>状态 {{snap.project.status}}</span><span>Revision {{snap.project.revision}}</span><span>{{snap.project.workspacePath}}</span></div>
 <main v-if="snap"><section class="canvas"><VueFlow :nodes="flowNodes" :edges="flowEdges" fit-view-on-init @node-click="(_,n)=>selectedNode=n.data?{...n.data,id:n.id}:null"><Background/><Controls/></VueFlow></section>
 <aside><template v-if="selectedNode"><h2>{{selectedNode.label}}</h2><div class="pill">{{selectedNode.type}} · {{selectedNode.status}}</div><button v-if="selectedNode.status==='WAITING_HUMAN'" class="primary full" @click="approve">批准 Gate</button></template><template v-else><h2>执行时间线</h2><div class="event" v-for="e in snap.events.slice(0,25)" :key="e.id"><b>{{e.type}}</b><small>{{new Date(e.createdAt).toLocaleString()}}</small></div></template></aside></main>
-<div v-else class="empty">创建或选择一个项目开始验证。</div></div>
+<div v-else class="empty">创建或选择一个项目开始验证。</div>
+<div class="console-bar" :class="{open:showConsole}"><div class="console-header" @click="toggleConsole"><span class="console-title">┤ 控制台日志</span><span class="console-badge">{{consoleLogs.length}}</span><span class="console-toggle">{{showConsole?'▼':'▲'}}</span></div><div v-show="showConsole" class="console-body"><div v-for="(l,i) in consoleLogs" :key="i" class="console-line">{{l}}</div></div></div></div>
 </template>
