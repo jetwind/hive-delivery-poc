@@ -6,6 +6,7 @@ const consoleLogs=ref<string[]>([]), showConsole=ref(false), consoleEs=ref<Event
 const autoTimer=ref<number>(0);
 const nodeSessions=ref<Record<string,any>>({}), loadingSession=ref('');
 const newRequirement=ref(''), creatingReq=ref(false);
+const changeDesc=ref(''), submittingChange=ref(false);
 const colors:any={PENDING:'#64748b',READY:'#2563eb',DISPATCHING:'#7c3aed',RUNNING:'#f59e0b',WAITING_EXTERNAL:'#d97706',WAITING_HUMAN:'#9333ea',COMPLETED:'#16a34a',FAILED:'#dc2626',BLOCKED:'#475569',SUPERSEDED:'#94a3b8'};
 
 const statusMsg=computed(()=>{
@@ -38,7 +39,9 @@ function onNodeClick({node:n}:any){selectedNode.value=n&&n.data?{...n.data,id:n.
 async function loadNodeSession(nodeId:string){loadingSession.value=nodeId;try{const r=await axios.get(`/api/projects/${selected.value}/nodes/${nodeId}/session`);nodeSessions.value[nodeId]=r.data;}catch(e){nodeSessions.value[nodeId]={error:String(e)};}finally{loadingSession.value='';}}
 function nodeRun(nodeId:string):any{return snap.value?.runs.find((r:any)=>r.nodeId===nodeId)||null;}
 async function createAndStart(){creatingReq.value=true;try{await create();await new Promise(r=>setTimeout(r,300));await start();}finally{creatingReq.value=false}}
+async function submitChange(){if(!changeDesc.value.trim()||!selected.value)return;submittingChange.value=true;try{await axios.post(`/api/projects/${selected.value}/events/change`,{description:changeDesc.value});changeDesc.value='';await refresh();}finally{submittingChange.value=false}}
 function statusLabel(s:string):string{const m:any={CREATED:'已创建',WAITING:'就绪',RUNNING:'运行中',COMPLETED:'已完成'};return m[s]||s;}
+function eventPayload(e:any):string{try{if(e.type==='CHANGE_REQUESTED'){const p=JSON.parse(e.payload||'{}');return'变更: '+(p.description||e.type)}return'';}catch{return''}}
 onMounted(loadProjects);onBeforeUnmount(()=>{es.value?.close();consoleEs.value?.close();stopAuto();});
 </script>
 <template>
@@ -64,6 +67,15 @@ onMounted(loadProjects);onBeforeUnmount(()=>{es.value?.close();consoleEs.value?.
         </button>
       </div>
 
+      <div v-if="snap&&snap.project.status!=='COMPLETED'" class="panel-section">
+        <h3>🔄 变更请求</h3>
+        <textarea v-model="changeDesc" placeholder="输入变更说明，例如：&#10;需求阶段新增对价格区间的支持" rows="3"></textarea>
+        <button class="full" :disabled="submittingChange||!changeDesc.trim()" @click="submitChange" style="background:#7c3aed;color:white;border:none">
+          {{submittingChange?'提交中...':'📝 提交变更 (Change Event)'}}
+        </button>
+        <p style="font-size:11px;color:#94a3b8;margin:6px 0 0">变更事件已持久化；Graph Patch 为下一扩展点</p>
+      </div>
+
       <div class="panel-section">
         <h3>📊 项目信息</h3>
         <div class="info-row"><span>状态</span><span class="pill mini" :class="snap.project.status">{{statusLabel(snap.project.status)}}</span></div>
@@ -74,8 +86,8 @@ onMounted(loadProjects);onBeforeUnmount(()=>{es.value?.close();consoleEs.value?.
 
       <div class="panel-section">
         <h3>🕐 事件时间线</h3>
-        <div class="event" v-for="e in snap.events.slice(0,25)" :key="e.id">
-          <div class="event-left"><b>{{nodeName(e.nodeId)||'系统'}}</b><small>{{e.type}}</small></div>
+        <div class="event" v-for="e in snap.events.slice(0,25)" :key="e.id" :class="{change: e.type==='CHANGE_REQUESTED'}">
+          <div class="event-left"><b>{{nodeName(e.nodeId)||'系统'}}</b><small>{{e.type}}</small><span v-if="eventPayload(e)" class="change-note">{{eventPayload(e)}}</span></div>
           <small class="event-time">{{new Date(e.createdAt).toLocaleTimeString()}}</small>
         </div>
       </div>

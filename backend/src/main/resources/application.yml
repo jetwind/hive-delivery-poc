@@ -4,9 +4,10 @@ spring:
   application:
     name: hive-delivery-poc
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/hive_delivery}
+    url: ${DB_URL:jdbc:h2:mem:hive_delivery;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH}
     username: ${DB_USERNAME:hive}
     password: ${DB_PASSWORD:hive}
+    driver-class-name: org.h2.Driver
   jpa:
     open-in-view: false
     hibernate:

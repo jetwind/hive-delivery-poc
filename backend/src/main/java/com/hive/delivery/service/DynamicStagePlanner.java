@@ -3,6 +3,7 @@ package com.hive.delivery.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hive.delivery.config.OpenCodeProperties;
 import com.hive.delivery.opencode.OpenCodeClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,13 +14,14 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class DynamicStagePlanner {
     private static final Logger log=LoggerFactory.getLogger(DynamicStagePlanner.class);
-    private final OpenCodeClient client; private final ObjectMapper json;
-    public DynamicStagePlanner(OpenCodeClient client, ObjectMapper json){this.client=client;this.json=json;}
+    private final OpenCodeClient client; private final ObjectMapper json; private final OpenCodeProperties props;
+    public DynamicStagePlanner(OpenCodeClient client, ObjectMapper json, OpenCodeProperties props){this.client=client;this.json=json;this.props=props;}
 
     public record NodePlan(String name,String description,String type,Map<String,String> executor,
                            List<String> dependsOn,List<String> acceptanceCriteria){}
 
     public List<NodePlan> plan(String projectName,String workspace,String stageCode,String stageName,String objective){
+        if(props.mock()){log.info("[OpenCode Plan] mock mode, using fallback for {} ({})",stageName,stageCode);return fallback(stageName);}
         String prompt=buildPrompt(projectName,workspace,stageCode,stageName,objective);
         log.info("[OpenCode Plan] {} / {} | objective: {}",stageCode,stageName,objective);
         try{

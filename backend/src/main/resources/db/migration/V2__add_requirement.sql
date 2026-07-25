@@ -1,1 +1,1 @@
-ALTER TABLE delivery_project ADD COLUMN IF NOT EXISTS requirement TEXT;
+ALTER TABLE delivery_project ADD COLUMN requirement TEXT;
