@@ -1,0 +1,35 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: hive-delivery-poc
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/hive_delivery}
+    username: ${DB_USERNAME:hive}
+    password: ${DB_PASSWORD:hive}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+hive:
+  delivery:
+    templates-path: ${DELIVERY_TEMPLATES_PATH:../delivery-templates}
+    max-ticks-per-run: 100
+  opencode:
+    enabled: ${HIVE_OPENCODE_ENABLED:true}
+    mock: ${HIVE_OPENCODE_MOCK:false}
+    base-url: ${OPENCODE_BASE_URL:http://127.0.0.1:4096}
+    username: ${OPENCODE_USERNAME:opencode}
+    password: ${OPENCODE_PASSWORD:}
+    agent: ${OPENCODE_AGENT:build}
+    reconcile-delay-ms: 5000
+logging:
+  level:
+    com.hive.delivery: INFO

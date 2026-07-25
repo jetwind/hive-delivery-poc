@@ -1,0 +1,49 @@
+apiVersion: hive.delivery/v1
+kind: StageTemplate
+metadata:
+  code: design
+  name: 方案与详细设计
+  version: 1.0.0
+contract:
+  objective: 形成可实施设计并明确风险
+  requiredInputs: []
+  requiredOutputs: []
+nodes:
+- id: impact
+  type: TASK
+  name: 分析系统影响范围
+  description: 分析系统影响范围
+  dependsOn: []
+  executor:
+    type: AGENT
+    handler: opencode.task
+    role: delivery-agent
+    approverRole: null
+  acceptanceCriteria:
+  - 识别服务、接口、数据和兼容风险
+- id: design
+  type: TASK
+  name: 编制详细设计
+  description: 编制详细设计
+  dependsOn:
+  - impact
+  executor:
+    type: AGENT
+    handler: opencode.task
+    role: delivery-agent
+    approverRole: null
+  acceptanceCriteria:
+  - 设计可直接指导实现
+- id: gate
+  type: GATE
+  name: 设计评审
+  description: 设计评审
+  dependsOn:
+  - design
+  executor:
+    type: HUMAN
+    handler: human.approval
+    role: null
+    approverRole: tech-lead
+  acceptanceCriteria:
+  - 技术负责人确认设计

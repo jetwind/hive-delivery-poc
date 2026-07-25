@@ -1,0 +1,36 @@
+apiVersion: hive.delivery/v1
+kind: StageTemplate
+metadata:
+  code: retrospective
+  name: 沉淀与复盘
+  version: 1.0.0
+contract:
+  objective: 形成可复用的项目知识
+  requiredInputs: []
+  requiredOutputs: []
+nodes:
+- id: summary
+  type: TASK
+  name: 生成项目总结与复盘
+  description: 生成项目总结与复盘
+  dependsOn: []
+  executor:
+    type: AGENT
+    handler: opencode.task
+    role: delivery-agent
+    approverRole: null
+  acceptanceCriteria:
+  - 经验、问题和资产已整理
+- id: baseline
+  type: TASK
+  name: 知识成果基线化
+  description: 知识成果基线化
+  dependsOn:
+  - summary
+  executor:
+    type: CODE
+    handler: artifact.baseline
+    role: null
+    approverRole: null
+  acceptanceCriteria:
+  - 复盘成果已保存

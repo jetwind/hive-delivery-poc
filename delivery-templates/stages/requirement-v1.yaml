@@ -1,0 +1,37 @@
+apiVersion: hive.delivery/v1
+kind: StageTemplate
+metadata:
+  code: requirement
+  name: 需求定义
+  version: 1.0.0
+contract:
+  objective: 明确范围、业务规则与验收标准
+  requiredInputs: []
+  requiredOutputs: []
+nodes:
+- id: analyze
+  type: TASK
+  name: 分析原始需求
+  description: 分析原始需求
+  dependsOn: []
+  executor:
+    type: AGENT
+    handler: opencode.task
+    role: delivery-agent
+    approverRole: null
+  acceptanceCriteria:
+  - 范围和业务规则明确
+  - 形成可验证的验收标准
+- id: gate
+  type: GATE
+  name: 需求确认
+  description: 需求确认
+  dependsOn:
+  - analyze
+  executor:
+    type: HUMAN
+    handler: human.approval
+    role: null
+    approverRole: tech-lead
+  acceptanceCriteria:
+  - 业务负责人确认需求

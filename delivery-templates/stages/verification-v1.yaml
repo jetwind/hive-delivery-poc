@@ -1,0 +1,36 @@
+apiVersion: hive.delivery/v1
+kind: StageTemplate
+metadata:
+  code: verification
+  name: 验证与验收
+  version: 1.0.0
+contract:
+  objective: 独立验证交付结果
+  requiredInputs: []
+  requiredOutputs: []
+nodes:
+- id: test
+  type: TASK
+  name: 执行回归测试
+  description: 执行回归测试
+  dependsOn: []
+  executor:
+    type: CODE
+    handler: ci.regression
+    role: null
+    approverRole: null
+  acceptanceCriteria:
+  - 回归通过
+- id: gate
+  type: GATE
+  name: 测试验收
+  description: 测试验收
+  dependsOn:
+  - test
+  executor:
+    type: HUMAN
+    handler: human.approval
+    role: null
+    approverRole: tech-lead
+  acceptanceCriteria:
+  - 测试负责人确认

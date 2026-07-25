@@ -1,0 +1,37 @@
+apiVersion: hive.delivery/v1
+kind: StageTemplate
+metadata:
+  code: planning
+  name: 交付任务规划
+  version: 1.0.0
+contract:
+  objective: 形成项目级交付单元和依赖
+  requiredInputs: []
+  requiredOutputs: []
+nodes:
+- id: plan
+  type: TASK
+  name: 生成交付任务计划
+  description: 生成交付任务计划
+  dependsOn: []
+  executor:
+    type: AGENT
+    handler: opencode.plan
+    role: delivery-agent
+    approverRole: null
+  acceptanceCriteria:
+  - 任务边界清晰
+  - 依赖与验收标准明确
+- id: baseline
+  type: TASK
+  name: 计划基线化
+  description: 计划基线化
+  dependsOn:
+  - plan
+  executor:
+    type: CODE
+    handler: artifact.baseline
+    role: null
+    approverRole: null
+  acceptanceCriteria:
+  - 计划已持久化

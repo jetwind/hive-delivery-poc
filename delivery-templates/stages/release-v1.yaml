@@ -1,0 +1,49 @@
+apiVersion: hive.delivery/v1
+kind: StageTemplate
+metadata:
+  code: release
+  name: 发布与运行确认
+  version: 1.0.0
+contract:
+  objective: 确认发布材料和运行结果
+  requiredInputs: []
+  requiredOutputs: []
+nodes:
+- id: prepare
+  type: TASK
+  name: 准备发布清单
+  description: 准备发布清单
+  dependsOn: []
+  executor:
+    type: AGENT
+    handler: opencode.task
+    role: delivery-agent
+    approverRole: null
+  acceptanceCriteria:
+  - 版本、配置、回滚方案明确
+- id: gate
+  type: GATE
+  name: 生产发布审批
+  description: 生产发布审批
+  dependsOn:
+  - prepare
+  executor:
+    type: HUMAN
+    handler: human.approval
+    role: null
+    approverRole: tech-lead
+  acceptanceCriteria:
+  - 发布负责人批准
+- id: verify
+  type: TASK
+  name: 发布后验证
+  description: 发布后验证
+  dependsOn:
+  - gate
+  executor:
+    type: CODE
+    handler: release.verify
+    role: null
+    approverRole: null
+  acceptanceCriteria:
+  - 关键检查通过

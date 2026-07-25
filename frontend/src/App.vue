@@ -1,0 +1,22 @@
+<script setup lang="ts">
+import {computed,onMounted,onBeforeUnmount,ref} from 'vue'; import axios from 'axios'; import {VueFlow,MarkerType} from '@vue-flow/core'; import {Background} from '@vue-flow/background'; import {Controls} from '@vue-flow/controls';
+type Project={id:string,name:string,status:string,revision:number,workspacePath:string}; type Snapshot={project:Project,nodes:any[],edges:any[],runs:any[],events:any[]};
+const projects=ref<Project[]>([]), selected=ref(''), snap=ref<Snapshot|null>(null), selectedNode=ref<any>(null), es=ref<EventSource|null>(null);
+const colors:any={PENDING:'#64748b',READY:'#2563eb',DISPATCHING:'#7c3aed',RUNNING:'#f59e0b',WAITING_EXTERNAL:'#d97706',WAITING_HUMAN:'#9333ea',COMPLETED:'#16a34a',FAILED:'#dc2626',BLOCKED:'#475569',SUPERSEDED:'#94a3b8'};
+const flowNodes=computed(()=>{if(!snap.value)return[];const stages=snap.value.nodes.filter(n=>n.type==='STAGE');const stageIndex=new Map(stages.map((s:any,i:number)=>[s.stageCode,i]));return snap.value.nodes.map((n:any)=>{const si=stageIndex.get(n.stageCode)??0;const children=snap.value!.nodes.filter(x=>x.parentNodeId===n.parentNodeId&&x.type!=='STAGE').sort((a,b)=>a.sortOrder-b.sortOrder);const ci=Math.max(0,children.findIndex(x=>x.id===n.id));return{id:n.id,position:n.type==='STAGE'?{x:si*310,y:20}:{x:si*310,y:150+ci*125},data:{label:n.title,status:n.status,type:n.type},style:{background:colors[n.status]||'#334155',color:'white',border:n.type==='GATE'?'3px solid #eab308':'1px solid #94a3b8',borderRadius:n.type==='STAGE'?'20px':'10px',width:'240px',padding:'12px'}}})});
+const flowEdges=computed(()=>snap.value?.edges.map((e:any)=>({id:e.id,source:e.source,target:e.target,markerEnd:MarkerType.ArrowClosed,animated:true}))||[]);
+async function loadProjects(){projects.value=(await axios.get('/api/projects')).data;if(!selected.value&&projects.value.length)select(projects.value[0].id)}
+async function create(){const r=await axios.post('/api/projects',{name:'商品查询服务演示',lifecycleCode:'software-delivery',lifecycleVersion:'1.0.0',workspacePath:'../workspace/product-search-demo'});await loadProjects();select(r.data.id)}
+async function select(id:string){selected.value=id;await refresh();es.value?.close();es.value=new EventSource(`/api/projects/${id}/stream`);es.value.onmessage=refresh;['PROJECT_STARTED','STAGE_EXPANDED','NODE_READY','NODE_STARTED','NODE_WAITING','NODE_COMPLETED','NODE_FAILED','HUMAN_APPROVED','STAGE_COMPLETED','PROJECT_COMPLETED'].forEach(t=>es.value?.addEventListener(t,refresh));}
+async function refresh(){if(selected.value)snap.value=(await axios.get(`/api/projects/${selected.value}/graph`)).data}
+async function start(){await axios.post(`/api/projects/${selected.value}/start`);setTimeout(refresh,300)}
+async function approve(){if(selectedNode.value){await axios.post(`/api/projects/${selected.value}/nodes/${selectedNode.value.id}/approve`);selectedNode.value=null;refresh()}}
+onMounted(loadProjects);onBeforeUnmount(()=>es.value?.close());
+</script>
+<template>
+<div class="shell"><header><div><h1>Hive Delivery Graph</h1><p>Java 21 · LangGraph4j · OpenCode</p></div><div class="actions"><select v-model="selected" @change="select(selected)"><option v-for="p in projects" :value="p.id">{{p.name}} · {{p.status}}</option></select><button @click="create">创建演示项目</button><button class="primary" :disabled="!selected" @click="start">运行 / 继续</button><a href="http://localhost:8080/?instance=delivery-control" target="_blank">Control Studio</a></div></header>
+<div v-if="snap" class="meta"><b>{{snap.project.name}}</b><span>状态 {{snap.project.status}}</span><span>Revision {{snap.project.revision}}</span><span>{{snap.project.workspacePath}}</span></div>
+<main v-if="snap"><section class="canvas"><VueFlow :nodes="flowNodes" :edges="flowEdges" fit-view-on-init @node-click="(_,n)=>selectedNode=n.data?{...n.data,id:n.id}:null"><Background/><Controls/></VueFlow></section>
+<aside><template v-if="selectedNode"><h2>{{selectedNode.label}}</h2><div class="pill">{{selectedNode.type}} · {{selectedNode.status}}</div><button v-if="selectedNode.status==='WAITING_HUMAN'" class="primary full" @click="approve">批准 Gate</button></template><template v-else><h2>执行时间线</h2><div class="event" v-for="e in snap.events.slice(0,25)" :key="e.id"><b>{{e.type}}</b><small>{{new Date(e.createdAt).toLocaleString()}}</small></div></template></aside></main>
+<div v-else class="empty">创建或选择一个项目开始验证。</div></div>
+</template>

@@ -1,0 +1,11 @@
+apiVersion: hive.delivery/v1
+kind: LifecycleTemplate
+metadata: { code: software-delivery, name: 软件项目交付, version: 1.0.0 }
+stages:
+  - { id: requirement, code: "01", name: 需求定义, template: stages/requirement-v1.yaml }
+  - { id: design, code: "02", name: 方案与详细设计, dependsOn: [requirement], template: stages/design-v1.yaml }
+  - { id: planning, code: "03", name: 交付任务规划, dependsOn: [design], template: stages/planning-v1.yaml }
+  - { id: implementation, code: "04", name: 实现与构建, dependsOn: [planning], template: stages/implementation-v1.yaml }
+  - { id: verification, code: "05", name: 验证与验收, dependsOn: [implementation], template: stages/verification-v1.yaml }
+  - { id: release, code: "06", name: 发布与运行确认, dependsOn: [verification], template: stages/release-v1.yaml }
+  - { id: retrospective, code: "07", name: 沉淀与复盘, dependsOn: [release], template: stages/retrospective-v1.yaml }

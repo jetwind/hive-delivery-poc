@@ -1,0 +1,38 @@
+apiVersion: hive.delivery/v1
+kind: StageTemplate
+metadata:
+  code: implementation
+  name: 实现与构建
+  version: 1.0.0
+contract:
+  objective: 完成代码实现和构建验证
+  requiredInputs: []
+  requiredOutputs: []
+nodes:
+- id: coding
+  type: TASK
+  name: 完成代码实现
+  description: 完成代码实现
+  dependsOn: []
+  executor:
+    type: AGENT
+    handler: opencode.task
+    role: delivery-agent
+    approverRole: null
+  acceptanceCriteria:
+  - 完成设计范围
+  - 补充测试
+  - 编译成功
+- id: build
+  type: TASK
+  name: 执行构建验证
+  description: 执行构建验证
+  dependsOn:
+  - coding
+  executor:
+    type: CODE
+    handler: ci.maven-test
+    role: null
+    approverRole: null
+  acceptanceCriteria:
+  - 构建验证完成
