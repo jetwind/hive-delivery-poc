@@ -16,6 +16,7 @@ public class DeliveryProject {
     @Column(nullable=false) private int currentGraphRevision;
     @Column(nullable=false) private String workspacePath;
     private String plannerSessionId;
+    @Column(columnDefinition="TEXT") private String requirement;
     @Column(nullable=false) private Instant createdAt;
     @Column(nullable=false) private Instant updatedAt;
     public static DeliveryProject create(String name, String code, String version, String workspace) {

@@ -6,6 +6,8 @@ import com.hive.delivery.domain.*;
 import com.hive.delivery.opencode.OpenCodeClient;
 import com.hive.delivery.repo.*;
 import com.hive.delivery.service.EventService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
@@ -14,6 +16,7 @@ import static com.hive.delivery.domain.Enums.*;
 
 @Service
 public class NodeExecutorService {
+    private static final Logger log=LoggerFactory.getLogger(NodeExecutorService.class);
     private final DeliveryNodeRepository nodes; private final TaskRunRepository runs; private final DeliveryProjectRepository projects;
     private final OpenCodeClient opencode; private final OpenCodeProperties props; private final EventService events; private final ObjectMapper json;
     public NodeExecutorService(DeliveryNodeRepository nodes,TaskRunRepository runs,DeliveryProjectRepository projects,OpenCodeClient opencode,OpenCodeProperties props,EventService events,ObjectMapper json){
@@ -31,11 +34,14 @@ public class NodeExecutorService {
         try{
             if(props.mock()) { run.setExternalSessionId("mock-"+UUID.randomUUID()); run.setStatus(RunStatus.WAITING_EXTERNAL);runs.save(run);node.setStatus(NodeStatus.WAITING_EXTERNAL);nodes.save(node);events.emit(project.getId(),EventType.NODE_WAITING,node.getId(),Map.of("mock",true));return; }
             if(!props.enabled()) throw new IllegalStateException("OpenCode integration disabled");
+            String taskPrompt=prompt(project,node);
+            log.info("[OpenCode Dispatch] {} | {} | prompt ({} chars)",node.getTitle(),node.getHandler(),taskPrompt.length());
             opencode.health(); var s=opencode.createSession("Task-"+node.getId()+"-"+node.getTitle(),project.getPlannerSessionId()); String sid=s.path("id").asText();
             if(sid.isBlank()) throw new IllegalStateException("OpenCode createSession response has no id: "+s);
+            log.info("[OpenCode Dispatch] session={} created for '{}'",sid,node.getTitle());
             run.setExternalSessionId(sid);run.setStatus(RunStatus.WAITING_EXTERNAL);runs.save(run);node.setStatus(NodeStatus.WAITING_EXTERNAL);nodes.save(node);
             opencode.promptAsync(sid,props.agent(),prompt(project,node));events.emit(project.getId(),EventType.NODE_WAITING,node.getId(),Map.of("sessionId",sid));
-        }catch(Exception e){fail(node,run,e.getMessage());}
+        }catch(Exception e){log.error("[OpenCode Dispatch] failed for '{}': {}",node.getTitle(),e.toString());fail(node,run,e.getMessage());}
     }
     private String prompt(DeliveryProject p,DeliveryNode n){return """
 你是 Hive Engineering 的交付任务执行 Agent。请在当前 OpenCode 工作区中完成以下任务。

@@ -16,8 +16,10 @@ public class ProjectService {
     private final TemplateRegistry templates; private final EventService events;
     public ProjectService(DeliveryProjectRepository projects,DeliveryNodeRepository nodes,DeliveryEdgeRepository edges,TaskRunRepository taskRuns,DeliveryEventRepository eventsRepo,TemplateRegistry templates,EventService events){
         this.projects=projects;this.nodes=nodes;this.edges=edges;this.taskRuns=taskRuns;this.eventsRepo=eventsRepo;this.templates=templates;this.events=events;}
-    @Transactional public DeliveryProject create(String name,String lifecycleCode,String version,String workspace){
-        var t=templates.lifecycle(lifecycleCode,version); var p=projects.save(DeliveryProject.create(name,lifecycleCode,version,workspace));
+    @Transactional public DeliveryProject create(String name,String lifecycleCode,String version,String workspace,String requirement){
+        var t=templates.lifecycle(lifecycleCode,version); var p=DeliveryProject.create(name,lifecycleCode,version,workspace);
+        if(requirement!=null&&!requirement.isBlank()) p.setRequirement(requirement);
+        projects.save(p);
         Map<String,UUID> ids=new LinkedHashMap<>(); int order=0;
         for(var s:t.stages()){
             var n=new DeliveryNode(); n.setId(UUID.randomUUID()); n.setProjectId(p.getId()); n.setTemplateNodeId(s.id()); n.setStageCode(s.code());

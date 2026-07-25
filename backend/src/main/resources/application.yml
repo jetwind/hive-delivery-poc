@@ -24,7 +24,7 @@ hive:
     max-ticks-per-run: 100
   opencode:
     enabled: ${HIVE_OPENCODE_ENABLED:true}
-    mock: ${HIVE_OPENCODE_MOCK:false}
+    mock: ${HIVE_OPENCODE_MOCK:true}
     base-url: ${OPENCODE_BASE_URL:http://127.0.0.1:4096}
     username: ${OPENCODE_USERNAME:opencode}
     password: ${OPENCODE_PASSWORD:}

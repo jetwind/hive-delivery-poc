@@ -4,12 +4,15 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hive.delivery.opencode.OpenCodeClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 @Service
 public class DynamicStagePlanner {
+    private static final Logger log=LoggerFactory.getLogger(DynamicStagePlanner.class);
     private final OpenCodeClient client; private final ObjectMapper json;
     public DynamicStagePlanner(OpenCodeClient client, ObjectMapper json){this.client=client;this.json=json;}
 
@@ -18,12 +21,14 @@ public class DynamicStagePlanner {
 
     public List<NodePlan> plan(String projectName,String workspace,String stageCode,String stageName,String objective){
         String prompt=buildPrompt(projectName,workspace,stageCode,stageName,objective);
+        log.info("[OpenCode Plan] {} / {} | objective: {}",stageCode,stageName,objective);
         try{
             var s=client.createSession("Plan-"+stageCode+"-"+stageName,null);
             String sid=s.path("id").asText();
             if(sid.isBlank()) throw new IllegalStateException("OpenCode createSession returned no id");
+            log.info("[OpenCode Plan] session={} created, sending prompt ({} chars)",sid,prompt.length());
             client.promptAsync(sid,"build",prompt);
-            for(int i=0;i<60;i++){
+            for(int i=0;i<6;i++){
                 TimeUnit.SECONDS.sleep(5);
                 var statuses=client.statuses();
                 JsonNode st=statuses.path(sid);
@@ -32,8 +37,11 @@ public class DynamicStagePlanner {
                 if("error".equalsIgnoreCase(type)||"failed".equalsIgnoreCase(type)) throw new IllegalStateException("OpenCode session failed: "+st);
             }
             var messages=client.messages(sid);
-            return parseResponse(messages);
+            var result=parseResponse(messages);
+            log.info("[OpenCode Plan] session={} done, parsed {} tasks",sid,result.size());
+            return result;
         }catch(Exception e){
+            log.warn("[OpenCode Plan] failed, using fallback for {}",stageName,e);
             return fallback(stageName);
         }
     }
@@ -75,10 +83,11 @@ Generate 2-4 tasks per stage. Include a GATE if human approval is needed. Output
                 if("text".equals(p.path("type").asText())) text=p.path("text").asText();
             }
         }
+        log.debug("[OpenCode Plan] raw AI response: {}",text.substring(0,Math.min(text.length(),500)));
         String jsonStr=extractJson(text);
         if(jsonStr.isEmpty()) return List.of();
         try{return json.readValue(jsonStr,new TypeReference<List<NodePlan>>(){});}
-        catch(Exception e){return List.of();}
+        catch(Exception e){log.warn("[OpenCode Plan] JSON parse failed: {}",e.getMessage());return List.of();}
     }
 
     private String extractJson(String text){

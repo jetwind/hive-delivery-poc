@@ -12,14 +12,17 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.*;
 import static com.hive.delivery.domain.Enums.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Component
 public class OpenCodeReconcileJob {
+    private static final Logger log=LoggerFactory.getLogger(OpenCodeReconcileJob.class);
     private final TaskRunRepository runs; private final DeliveryNodeRepository nodes; private final OpenCodeClient client;
     private final OpenCodeProperties props; private final EventService events; private final ProjectControlService control;
     public OpenCodeReconcileJob(TaskRunRepository runs,DeliveryNodeRepository nodes,OpenCodeClient client,OpenCodeProperties props,EventService events,@Lazy ProjectControlService control){this.runs=runs;this.nodes=nodes;this.client=client;this.props=props;this.events=events;this.control=control;}
     @Scheduled(fixedDelayString="${hive.opencode.reconcile-delay-ms:5000}") public void poll(){
-        var waiting=runs.findByStatus(RunStatus.WAITING_EXTERNAL); if(waiting.isEmpty()) return;
+        var waiting=runs.findByStatus(RunStatus.WAITING_EXTERNAL); if(!waiting.isEmpty()) log.info("[Reconcile] {} WAITING runs",waiting.size()); else return;
         if(props.mock()){for(var r:waiting) if(r.getStartedAt().isBefore(Instant.now().minusSeconds(2))) finishMock(r);return;}
         if(!props.enabled()) return;
         JsonNode statuses;try{statuses=client.statuses();}catch(Exception e){return;}

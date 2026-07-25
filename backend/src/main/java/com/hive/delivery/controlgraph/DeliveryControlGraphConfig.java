@@ -17,7 +17,7 @@ public class DeliveryControlGraphConfig {
     public DeliveryControlGraphConfig(ControlDecisionService decisions,StageExpansionService expansion,NodeExecutorService executor,StageCompletionService stages,ProjectService projects){this.decisions=decisions;this.expansion=expansion;this.executor=executor;this.stages=stages;this.projects=projects;}
     @Bean public StateGraph<DeliveryControlState> deliveryControlGraph() throws GraphStateException {
         return new StateGraph<>(DeliveryControlState::new)
-          .addNode("load_context",node_async(state->{var d=decisions.decide(UUID.fromString(state.projectId()));Map<String,Object> u=new HashMap<>();u.put(DeliveryControlState.ACTION,d.action());u.put(DeliveryControlState.MESSAGE,d.message());if(d.nodeId()!=null)u.put(DeliveryControlState.CURRENT_NODE_ID,d.nodeId().toString());return u;}))
+          .addNode("load_context",node_async(state->{var pid=state.projectId();if(pid.isEmpty())return Map.of(DeliveryControlState.ACTION,"IDLE");var d=decisions.decide(UUID.fromString(pid));Map<String,Object> u=new HashMap<>();u.put(DeliveryControlState.ACTION,d.action());u.put(DeliveryControlState.MESSAGE,d.message());if(d.nodeId()!=null)u.put(DeliveryControlState.CURRENT_NODE_ID,d.nodeId().toString());return u;}))
           .addNode("route",(state,config)->completedFuture(Map.of()))
           .addNode("expand_stage",node_async(state->{expansion.expand(UUID.fromString(state.projectId()),UUID.fromString(state.currentNodeId().orElseThrow()));return Map.of();}))
           .addNode("execute_node",node_async(state->{executor.dispatch(UUID.fromString(state.projectId()),UUID.fromString(state.currentNodeId().orElseThrow()));return Map.of();}))
