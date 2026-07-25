@@ -22,4 +22,5 @@ public class DeliveryController {
     @PostMapping("/projects/{id}/events/change") public Map<String,Object> change(@PathVariable UUID id,@RequestBody ChangeRequest r){events.emit(id,com.hive.delivery.domain.Enums.EventType.CHANGE_REQUESTED,null,Map.of("description",r.description(),"note","POC persists the event; Graph Patch planner is the next extension point"));return Map.of("accepted",true);}
     @GetMapping(value="/projects/{id}/stream",produces=MediaType.TEXT_EVENT_STREAM_VALUE) public SseEmitter stream(@PathVariable UUID id){return stream.subscribe(id);}
     @PostMapping("/templates/reload") public Map<String,Object> reload() throws Exception{templates.reload();return Map.of("reloaded",true,"count",templates.lifecycles().size());}
+    @DeleteMapping("/projects") public Map<String,Object> clearAll(){projects.deleteAll();return Map.of("cleared",true);}
 }

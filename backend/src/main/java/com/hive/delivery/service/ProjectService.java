@@ -12,9 +12,10 @@ import static com.hive.delivery.domain.Enums.*;
 @Service
 public class ProjectService {
     private final DeliveryProjectRepository projects; private final DeliveryNodeRepository nodes; private final DeliveryEdgeRepository edges;
+    private final TaskRunRepository taskRuns; private final DeliveryEventRepository eventsRepo;
     private final TemplateRegistry templates; private final EventService events;
-    public ProjectService(DeliveryProjectRepository projects,DeliveryNodeRepository nodes,DeliveryEdgeRepository edges,TemplateRegistry templates,EventService events){
-        this.projects=projects;this.nodes=nodes;this.edges=edges;this.templates=templates;this.events=events;}
+    public ProjectService(DeliveryProjectRepository projects,DeliveryNodeRepository nodes,DeliveryEdgeRepository edges,TaskRunRepository taskRuns,DeliveryEventRepository eventsRepo,TemplateRegistry templates,EventService events){
+        this.projects=projects;this.nodes=nodes;this.edges=edges;this.taskRuns=taskRuns;this.eventsRepo=eventsRepo;this.templates=templates;this.events=events;}
     @Transactional public DeliveryProject create(String name,String lifecycleCode,String version,String workspace){
         var t=templates.lifecycle(lifecycleCode,version); var p=projects.save(DeliveryProject.create(name,lifecycleCode,version,workspace));
         Map<String,UUID> ids=new LinkedHashMap<>(); int order=0;
@@ -34,4 +35,15 @@ public class ProjectService {
     @Transactional public void markWaiting(UUID id){var p=get(id);if(p.getStatus()!=ProjectStatus.COMPLETED){p.setStatus(ProjectStatus.WAITING);projects.save(p);}}
     @Transactional public void markCompleted(UUID id){var p=get(id);p.setStatus(ProjectStatus.COMPLETED);projects.save(p);events.emit(id,EventType.PROJECT_COMPLETED,null,Map.of());}
     @Transactional public void bumpRevision(UUID id){var p=get(id);p.setCurrentGraphRevision(p.getCurrentGraphRevision()+1);projects.save(p);}
+    @Transactional public void deleteAll(){
+        var all=projects.findAll(); if(all.isEmpty())return;
+        for(var p:all){
+            var pid=p.getId();
+            taskRuns.deleteAll(taskRuns.findByProjectIdOrderByStartedAtDesc(pid));
+            eventsRepo.deleteAll(eventsRepo.findTop200ByProjectIdOrderByCreatedAtDesc(pid));
+            nodes.deleteAll(nodes.findByProjectIdOrderBySortOrderAsc(pid));
+            edges.deleteAll(edges.findByProjectId(pid));
+            projects.delete(p);
+        }
+    }
 }
