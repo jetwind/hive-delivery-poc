@@ -13,7 +13,8 @@ import static com.hive.delivery.domain.Enums.*;
 public class StageExpansionService {
     private final ProjectService projectService; private final DeliveryNodeRepository nodes; private final DeliveryEdgeRepository edges;
     private final TemplateRegistry templates; private final EventService events; private final ObjectMapper json;
-    public StageExpansionService(ProjectService projectService,DeliveryNodeRepository nodes,DeliveryEdgeRepository edges,TemplateRegistry templates,EventService events,ObjectMapper json){this.projectService=projectService;this.nodes=nodes;this.edges=edges;this.templates=templates;this.events=events;this.json=json;}
+    private final DynamicStagePlanner planner;
+    public StageExpansionService(ProjectService projectService,DeliveryNodeRepository nodes,DeliveryEdgeRepository edges,TemplateRegistry templates,EventService events,ObjectMapper json,DynamicStagePlanner planner){this.projectService=projectService;this.nodes=nodes;this.edges=edges;this.templates=templates;this.events=events;this.json=json;this.planner=planner;}
     public Optional<DeliveryNode> findExpandable(UUID projectId){
         return nodes.findByProjectIdOrderBySortOrderAsc(projectId).stream().filter(n->n.getNodeType()==NodeType.STAGE&&n.getStatus()==NodeStatus.READY)
                 .filter(n->nodes.findByProjectIdAndParentNodeIdOrderBySortOrderAsc(projectId,n.getId()).isEmpty()).findFirst();
@@ -22,18 +23,39 @@ public class StageExpansionService {
         var project=projectService.get(projectId); var stage=nodes.findById(stageId).orElseThrow();
         var life=templates.lifecycle(project.getLifecycleTemplateCode(),project.getLifecycleTemplateVersion());
         var ref=life.stages().stream().filter(s->s.code().equals(stage.getStageCode())).findFirst().orElseThrow();
-        var st=templates.stageByFile(ref.template()); projectService.bumpRevision(projectId); int rev=projectService.get(projectId).getCurrentGraphRevision();
+        var template=dynamicExpand(project,stage,ref) ? null : templates.stageByFile(ref.template());
+        if(template==null) return;
+        projectService.bumpRevision(projectId); int rev=projectService.get(projectId).getCurrentGraphRevision();
         Map<String,UUID> ids=new LinkedHashMap<>(); int index=1;
-        for(var nt:st.nodes()){
+        for(var nt:template.nodes()){
             var n=new DeliveryNode();n.setId(UUID.randomUUID());n.setProjectId(projectId);n.setTemplateNodeId(nt.id());n.setStageCode(stage.getStageCode());
             n.setNodeType(NodeType.valueOf(nt.type()));n.setTitle(nt.name());n.setDescription(nt.description());n.setStatus(nt.dependsOn()==null||nt.dependsOn().isEmpty()?NodeStatus.READY:NodeStatus.BLOCKED);
             n.setExecutorType(ExecutorType.valueOf(nt.executor().type()));n.setHandler(nt.executor().handler());n.setAgentRole(nt.executor().role());n.setParentNodeId(stageId);n.setCreatedRevision(rev);n.setSortOrder(stage.getSortOrder()+index++);
             try{n.setAcceptanceCriteriaJson(json.writeValueAsString(nt.acceptanceCriteria()==null?List.of():nt.acceptanceCriteria()));}catch(Exception e){n.setAcceptanceCriteriaJson("[]");}
             nodes.save(n);ids.put(nt.id(),n.getId()); if(n.getStatus()==NodeStatus.READY) events.emit(projectId,EventType.NODE_READY,n.getId(),Map.of("title",n.getTitle()));
         }
-        for(var nt:st.nodes()) if(nt.dependsOn()!=null) for(String dep:nt.dependsOn()){
+        for(var nt:template.nodes()) if(nt.dependsOn()!=null) for(String dep:nt.dependsOn()){
             var e=new DeliveryEdge();e.setId(UUID.randomUUID());e.setProjectId(projectId);e.setFromNodeId(ids.get(dep));e.setToNodeId(ids.get(nt.id()));e.setEdgeType(EdgeType.DEPENDS_ON);e.setCreatedRevision(rev);edges.save(e);
         }
         stage.setStatus(NodeStatus.RUNNING);nodes.save(stage);events.emit(projectId,EventType.STAGE_EXPANDED,stageId,Map.of("stage",stage.getStageCode(),"revision",rev));
+    }
+    private boolean dynamicExpand(DeliveryProject project,DeliveryNode stage,Object ref){
+        try{
+            var objective=ref.getClass().getMethod("objective").invoke(ref).toString();
+            var plans=planner.plan(project.getName(),project.getWorkspacePath(),stage.getStageCode(),stage.getTitle(),objective);
+            if(plans.isEmpty()) return false;
+            projectService.bumpRevision(project.getId()); int rev=projectService.get(project.getId()).getCurrentGraphRevision();
+            Map<String,UUID> ids=new LinkedHashMap<>(); int index=1;
+            for(var p:plans){
+                var n=new DeliveryNode();n.setId(UUID.randomUUID());n.setProjectId(project.getId());n.setTemplateNodeId("dynamic-"+index);n.setStageCode(stage.getStageCode());
+                n.setNodeType("GATE".equals(p.type())?NodeType.GATE:NodeType.TASK);n.setTitle(p.name());n.setDescription(p.description());n.setStatus(p.dependsOn()==null||p.dependsOn().isEmpty()?NodeStatus.READY:NodeStatus.BLOCKED);
+                var exe=p.executor();n.setExecutorType(ExecutorType.valueOf(exe.getOrDefault("type","AGENT")));n.setHandler(exe.getOrDefault("handler","opencode.task"));n.setAgentRole(exe.getOrDefault("role",""));n.setParentNodeId(stage.getId());n.setCreatedRevision(rev);n.setSortOrder(stage.getSortOrder()+index++);
+                try{n.setAcceptanceCriteriaJson(json.writeValueAsString(p.acceptanceCriteria()==null?List.of():p.acceptanceCriteria()));}catch(Exception e){n.setAcceptanceCriteriaJson("[]");}
+                nodes.save(n);ids.put(p.name(),n.getId());if(n.getStatus()==NodeStatus.READY) events.emit(project.getId(),EventType.NODE_READY,n.getId(),Map.of("title",n.getTitle()));
+                for(String dep:p.dependsOn()){var ee=new DeliveryEdge();ee.setId(UUID.randomUUID());ee.setProjectId(project.getId());ee.setFromNodeId(ids.get(dep));ee.setToNodeId(ids.get(p.name()));ee.setEdgeType(EdgeType.DEPENDS_ON);ee.setCreatedRevision(rev);edges.save(ee);}
+            }
+            stage.setStatus(NodeStatus.RUNNING);nodes.save(stage);events.emit(project.getId(),EventType.STAGE_EXPANDED,stage.getId(),Map.of("stage",stage.getStageCode(),"dynamic",true,"revision",rev));
+            return true;
+        }catch(Exception e){return false;}
     }
 }
